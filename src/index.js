@@ -1,53 +1,72 @@
+import './css/styles.css';
+import { Notify } from 'notiflix/build/notiflix-notify-aio';
+import SimpleLightbox from 'simplelightbox';
+import 'simplelightbox/dist/simple-lightbox.min.css';
+import { renderPhotosList } from './js/renderPhotosList';
+import { getPhotos } from './js/apiService';
 
-import iziToast from 'izitoast';
-import 'izitoast/dist/css/iziToast.min.css';
-import { fetchImages } from './pixabay-api';
-import { renderImages, clearGallery } from './render-functions';
-
-const form = document.querySelector('#search-form');
-const gallery = document.querySelector('.gallery');
-const loader = document.querySelector('.loader');
+const submitForm = document.querySelector('.search-form');
+const galleryList = document.querySelector('.gallery');
 const loadMoreBtn = document.querySelector('.load-more');
 
-form.addEventListener('submit', async function (event) {
+let page = 1;
+let searchQuery = '';
+loadMoreBtn.style.setProperty('display', 'none', 'important');
+let total = 0;
+
+submitForm.addEventListener('submit', onSearch);
+loadMoreBtn.addEventListener('click', onLoadPhotos);
+
+let gallery = new SimpleLightbox('.gallery a', { captionsData: 'alt' });
+
+function onSearch(event) {
   event.preventDefault();
+  searchQuery = event.currentTarget.elements.searchQuery.value;
+  galleryList.innerHTML = '';
+  total = 0;
 
-  const searchInput = document.querySelector('input[name="searchQuery"]');
-  const searchTerm = searchInput.value.trim();
+  if (searchQuery !== '') {
+    page = 1;
+    onLoadPhotos();
+    loadMoreBtn.style.setProperty('display', 'none', 'important');
+  };
+};
 
-  if (!searchTerm) {
-    iziToast.error({
-      title: 'Error',
-      message: 'Please enter a search term.',
+function onLoadPhotos() {
+  loadMoreBtn.style.setProperty('display', 'none', 'important');
+  getPhotos(searchQuery, page)
+    .then((array) => {
+      renderPhotosList(array.hits, galleryList, gallery);
+      total += array.hits.length;
+      const totalHits = array.totalHits;
+
+      if (total === 0) {
+        Notify.warning('Sorry, there are no images matching your search query.');
+      } else if (total >= totalHits) {
+        Notify.warning('You have reached the end of the search results.');
+      } else {
+        loadMoreBtn.style.removeProperty('display'); 
+        forScrollPage();
+        if (page === 2) {
+          Notify.success(`Hooray! We found ${totalHits} images.`);
+        }
+      }
+    })
+    .catch((error) => {
+      Notify.failure(
+        'Sorry, there was an error retrieving images. Please try again.'
+      );
     });
-    return;
-  }
+  page += 1;
+}
 
-  clearGallery();
-  loader.style.display = 'block';
+function forScrollPage() {
+  const { height: cardHeight } = document
+    .querySelector('.gallery')
+    .firstElementChild.getBoundingClientRect();
 
-  try {
-    const images = await fetchImages(searchTerm);
-    if (images.length === 0) {
-      iziToast.warning({
-        title: 'Warning',
-        message:
-          'Sorry, there are no images matching your search query. Please try again!',
-      });
-    } else {
-      renderImages(images, gallery);
-    }
-  } catch (error) {
-    iziToast.error({
-      title: 'Error',
-      message: 'Failed to fetch images. Please try again later.',
-    });
-  } finally {
-    loader.style.display = 'none';
-  }
-});
-
-// Load more functionality
-loadMoreBtn.addEventListener('click', function () {
-  // Implement your load more functionality here
-});
+  window.scrollBy({
+    top: cardHeight * 2,
+    behavior: 'smooth',
+  });
+};
